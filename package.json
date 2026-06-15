@@ -1,7 +1,7 @@
 {
   "name": "pi-thinking-messaging",
-  "version": "0.1.0",
-  "description": "Pi extension that adds elapsed time and current-run output tokens to Pi's original working/thinking loader.",
+  "version": "0.1.1",
+  "description": "Pi extension that adds elapsed time, directional tokens, and idle notices to Pi's original working/thinking loader.",
   "type": "module",
   "packageManager": "pnpm@11.5.2",
   "keywords": [
@@ -28,15 +28,12 @@
       "./src/index.ts"
     ]
   },
-  "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*"
-  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.9.0"
   },
   "scripts": {
+    "test": "node --test --experimental-strip-types \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
