@@ -1,0 +1,46 @@
+{
+  "name": "pi-thinking-messaging",
+  "version": "0.1.0",
+  "description": "Pi extension that adds elapsed time and current-run output tokens to Pi's original working/thinking loader.",
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "thinking",
+    "working-message",
+    "tokens"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dantetekanem/pi-thinking-messaging.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dantetekanem/pi-thinking-messaging/issues"
+  },
+  "homepage": "https://github.com/dantetekanem/pi-thinking-messaging#readme",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
