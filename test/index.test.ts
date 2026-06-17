@@ -45,17 +45,18 @@ test("shows an up arrow for request/input tokens", () => {
 	assert.doesNotMatch(message, new RegExp(IDLE_NOTICE));
 });
 
-test("shows a down arrow for assistant output tokens", () => {
+test("shows a down arrow while keeping the token count cumulative", () => {
 	const message = buildWorkingMessage(
 		makeRun({
 			tokenDirection: "down",
+			requestInputTokens: 1_200,
 			completedOutputTokens: 1_000,
 			currentMessageOutputTokens: 250,
 		}),
 		1_000,
 	);
 
-	assert.match(message, /↓ 1\.3k tokens/);
+	assert.match(message, /↓ 2\.5k tokens/);
 	assert.doesNotMatch(message, /↑/);
 });
 
@@ -97,11 +98,11 @@ test("counts only current talk for uploaded provider request tokens", () => {
 		assert.doesNotMatch(workingMessages.at(-1) ?? "", /34\.0k tokens/);
 
 		handlers.message_end?.(
-			{ message: { role: "assistant", content: [], usage: { input: 34_000, output: 0 } } },
+			{ message: { role: "assistant", content: [], usage: { input: 34_000, output: 300 } } },
 			ctx,
 		);
 
-		assert.match(workingMessages.at(-1) ?? "", /↑ 1\.2k tokens/);
+		assert.match(workingMessages.at(-1) ?? "", /↓ 1\.5k tokens/);
 		assert.doesNotMatch(workingMessages.at(-1) ?? "", /34\.0k tokens/);
 	} finally {
 		handlers.agent_end?.(

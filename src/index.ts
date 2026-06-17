@@ -140,8 +140,10 @@ const estimateOutputTokensFromContent = (content: unknown): number => {
 export const currentRunOutputTokens = (run: ActiveRun): number =>
 	run.completedOutputTokens + run.currentMessageOutputTokens;
 
-const currentDisplayedTokens = (run: ActiveRun): number =>
-	run.tokenDirection === "up" ? run.requestInputTokens : currentRunOutputTokens(run);
+export const currentRunTotalTokens = (run: ActiveRun): number => run.requestInputTokens + currentRunOutputTokens(run);
+
+export const formatTokenSummary = (run: ActiveRun): string =>
+	`${TOKEN_DIRECTION_ARROW[run.tokenDirection]} ${formatCompactTokens(currentRunTotalTokens(run))}`;
 
 export const IDLE_STAGES: ReadonlyArray<{ thresholdMs: number; notice: string; color: IdleColor }> = [
 	{ thresholdMs: IDLE_THRESHOLD_MS, notice: IDLE_NOTICE, color: "red" },
@@ -159,8 +161,7 @@ export const isRunIdle = (run: ActiveRun, now = Date.now()): boolean =>
 	getIdleStage(run, now) !== undefined;
 
 export const buildWorkingMessage = (run: ActiveRun, now = Date.now()): string => {
-	const tokenArrow = TOKEN_DIRECTION_ARROW[run.tokenDirection];
-	const baseMessage = `${run.phase}… (${formatElapsed(now - run.startedAt)} · ${tokenArrow} ${formatCompactTokens(currentDisplayedTokens(run))})`;
+	const baseMessage = `${run.phase}… (${formatElapsed(now - run.startedAt)} · ${formatTokenSummary(run)})`;
 	const idleStage = getIdleStage(run, now);
 	return idleStage ? `${baseMessage} ${colorText(idleStage.notice, idleStage.color)}` : baseMessage;
 };
@@ -322,10 +323,14 @@ export default function thinkingMessagingExtension(pi: ExtensionAPI) {
 		reconcileCurrentMessageEstimate(activeRun, event.message);
 		stripThinkingBlocksFromMessage(event.message);
 		const usageOutput = event.message.usage?.output;
-		const finalOutputTokens =
+		const reportedOutputTokens =
 			typeof usageOutput === "number" && Number.isFinite(usageOutput) && usageOutput > 0
 				? usageOutput
-				: activeRun.currentMessageOutputTokens;
+				: undefined;
+		const finalOutputTokens =
+			reportedOutputTokens === undefined
+				? activeRun.currentMessageOutputTokens
+				: Math.max(reportedOutputTokens, activeRun.currentMessageOutputTokens);
 		if (finalOutputTokens > 0) markTokenActivity(activeRun, "down");
 		activeRun.completedOutputTokens += finalOutputTokens;
 		activeRun.currentMessageOutputTokens = 0;
