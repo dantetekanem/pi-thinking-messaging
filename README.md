@@ -22,8 +22,8 @@ Thinking… (7m 7s · ↓ 30.0k tokens)
 - Switches the controlled working message between `Thinking…` and `Working…` based on the current assistant stream phase.
 - Updates the working message every second with elapsed time from `agent_start`.
 - Shows `↑` while request/input tokens are being sent upstream, then `↓` while assistant output tokens are streaming back.
-- Estimates tokens from provider payloads and the current assistant message while streaming.
-- Replaces estimates with provider-reported usage when each assistant message ends.
+- For `↑`, estimates only the current user talk/prompt text, not the full serialized provider payload, system prompt, tool schemas, or cached context overhead.
+- For `↓`, estimates the current assistant message while streaming, then replaces the output estimate with provider-reported output usage when each assistant message ends.
 - Appends staged idle notices when no request or response token activity is seen:
   - after more than 60 seconds: yellow `- agent is taking a while...`
   - after more than 180 seconds: yellow `- agent is probably idle...`
@@ -69,4 +69,4 @@ pnpm test
 
 ## Token count limitation
 
-During streaming, provider-reported exact usage may not be finalized until the response completes. This extension estimates the current request payload and assistant message from streamed content, then replaces those estimates with provider `usage.input` and `usage.output` when Pi receives them at `message_end`.
+During streaming, provider-reported exact usage may not be finalized until the response completes. This extension intentionally treats `↑` as current user talk/prompt size rather than exact provider input usage, because provider `usage.input` includes system prompt, tool schemas, cached context, and other overhead. Assistant `↓` output is estimated while streaming and replaced with provider `usage.output` when Pi receives it at `message_end`.

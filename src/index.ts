@@ -20,7 +20,8 @@ interface AssistantMessage {
 interface AgentEventMap {
 	session_start: unknown;
 	agent_start: unknown;
-	before_provider_payload: { payload: unknown };
+	before_agent_start: { prompt?: unknown };
+	before_provider_request: { payload: unknown };
 	message_start: { message: AssistantMessage };
 	message_update: { message: AssistantMessage; assistantMessageEvent: { type?: string; delta?: unknown } };
 	message_end: { message: AssistantMessage };
@@ -72,6 +73,7 @@ export interface ActiveRun {
 
 let activeRun: ActiveRun | undefined;
 let updateTimer: ReturnType<typeof setInterval> | undefined;
+let pendingRequestInputTokens = 0;
 
 export const formatElapsed = (elapsedMs: number): string => {
 	const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1_000));
@@ -106,9 +108,6 @@ const stringifyLength = (value: unknown): number => {
 		return 0;
 	}
 };
-
-const estimateTokensFromUnknown = (value: unknown): number =>
-	Math.ceil(stringifyLength(value) / APPROX_CHARS_PER_TOKEN);
 
 const estimateOutputTokensFromContent = (content: unknown): number => {
 	if (!Array.isArray(content)) return 0;
@@ -171,12 +170,6 @@ const markTokenActivity = (run: ActiveRun, direction: TokenDirection): void => {
 	run.lastTokenAt = Date.now();
 };
 
-const setRequestInputTokens = (run: ActiveRun, tokens: number): void => {
-	if (!Number.isFinite(tokens) || tokens <= 0) return;
-	run.requestInputTokens = Math.round(tokens);
-	markTokenActivity(run, "up");
-};
-
 const updateWorkingMessage = (ctx: ExtensionContext, run: ActiveRun): void => {
 	ctx.ui.setWorkingMessage(buildWorkingMessage(run));
 };
@@ -212,12 +205,14 @@ const startRun = (ctx: ExtensionContext): void => {
 	clearUpdateTimer();
 
 	const now = Date.now();
+	const initialRequestInputTokens = pendingRequestInputTokens;
+	pendingRequestInputTokens = 0;
 	const run: ActiveRun = {
 		startedAt: now,
 		lastTokenAt: now,
 		phase: DEFAULT_PHASE,
 		tokenDirection: "up",
-		requestInputTokens: 0,
+		requestInputTokens: initialRequestInputTokens,
 		completedOutputTokens: 0,
 		currentMessageOutputTokens: 0,
 	};
@@ -281,17 +276,22 @@ export default function thinkingMessagingExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		clearUpdateTimer();
 		activeRun = undefined;
+		pendingRequestInputTokens = 0;
 		ctx.ui.setHiddenThinkingLabel(HIDDEN_THINKING_LABEL);
 		restoreWorkingDefaults(ctx);
+	});
+
+	pi.on("before_agent_start", (event) => {
+		pendingRequestInputTokens = typeof event.prompt === "string" ? estimateTokensFromText(event.prompt) : 0;
 	});
 
 	pi.on("agent_start", (_event, ctx) => {
 		startRun(ctx);
 	});
 
-	pi.on("before_provider_payload", (event, ctx) => {
+	pi.on("before_provider_request", (_event, ctx) => {
 		if (!activeRun) return;
-		setRequestInputTokens(activeRun, estimateTokensFromUnknown(event.payload));
+		markTokenActivity(activeRun, "up");
 		updateWorkingMessage(ctx, activeRun);
 	});
 
@@ -321,10 +321,6 @@ export default function thinkingMessagingExtension(pi: ExtensionAPI) {
 
 		reconcileCurrentMessageEstimate(activeRun, event.message);
 		stripThinkingBlocksFromMessage(event.message);
-		const usageInput = event.message.usage?.input;
-		if (typeof usageInput === "number" && Number.isFinite(usageInput) && usageInput > 0) {
-			activeRun.requestInputTokens = Math.round(usageInput);
-		}
 		const usageOutput = event.message.usage?.output;
 		const finalOutputTokens =
 			typeof usageOutput === "number" && Number.isFinite(usageOutput) && usageOutput > 0

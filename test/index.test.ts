@@ -59,6 +59,66 @@ test("shows a down arrow for assistant output tokens", () => {
 	assert.doesNotMatch(message, /↑/);
 });
 
+test("counts only current talk for uploaded provider request tokens", () => {
+	const handlers: Record<string, Handler> = {};
+	const workingMessages: Array<string | undefined> = [];
+
+	const originalSetInterval = globalThis.setInterval;
+	const originalClearInterval = globalThis.clearInterval;
+	globalThis.setInterval = ((_callback: () => void) => 123 as unknown as ReturnType<typeof setInterval>) as typeof setInterval;
+	globalThis.clearInterval = ((_timer: ReturnType<typeof setInterval>) => {}) as typeof clearInterval;
+
+	try {
+		thinkingMessagingExtension({
+			on: (eventName: string, handler: Handler) => {
+				handlers[eventName] = handler;
+			},
+		});
+
+		const ctx: FakeContext = {
+			ui: {
+				setWorkingMessage: (message) => workingMessages.push(message),
+				setWorkingIndicator: () => {},
+				setHiddenThinkingLabel: () => {},
+			},
+		};
+		const talk = "x".repeat(4_800);
+		const payloadWithPromptOverhead = {
+			system: "system prompt overhead".repeat(2_000),
+			tools: [{ name: "tool", description: "tool schema overhead".repeat(2_000) }],
+			messages: [{ role: "user", content: talk }],
+		};
+
+		handlers.before_agent_start?.({ prompt: talk }, ctx);
+		handlers.agent_start?.({}, ctx);
+		handlers.before_provider_request?.({ payload: payloadWithPromptOverhead }, ctx);
+
+		assert.match(workingMessages.at(-1) ?? "", /↑ 1\.2k tokens/);
+		assert.doesNotMatch(workingMessages.at(-1) ?? "", /34\.0k tokens/);
+
+		handlers.message_end?.(
+			{ message: { role: "assistant", content: [], usage: { input: 34_000, output: 0 } } },
+			ctx,
+		);
+
+		assert.match(workingMessages.at(-1) ?? "", /↑ 1\.2k tokens/);
+		assert.doesNotMatch(workingMessages.at(-1) ?? "", /34\.0k tokens/);
+	} finally {
+		handlers.agent_end?.(
+			{},
+			{
+				ui: {
+					setWorkingMessage: () => {},
+					setWorkingIndicator: () => {},
+					setHiddenThinkingLabel: () => {},
+				},
+			},
+		);
+		globalThis.setInterval = originalSetInterval;
+		globalThis.clearInterval = originalClearInterval;
+	}
+});
+
 test("does not show an idle notice at exactly 60 seconds without token activity", () => {
 	const message = buildWorkingMessage(makeRun({ lastTokenAt: 0 }), IDLE_TAKING_A_WHILE_THRESHOLD_MS);
 

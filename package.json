@@ -1,6 +1,6 @@
 {
   "name": "pi-thinking-messaging",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pi extension that adds elapsed time, directional tokens, and idle notices to Pi's original working/thinking loader.",
   "type": "module",
   "packageManager": "pnpm@11.5.2",
