@@ -71,10 +71,6 @@ export interface ActiveRun {
 	currentMessageOutputTokens: number;
 }
 
-let activeRun: ActiveRun | undefined;
-let updateTimer: ReturnType<typeof setInterval> | undefined;
-let pendingRequestInputTokens = 0;
-
 export const formatElapsed = (elapsedMs: number): string => {
 	const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1_000));
 	const hours = Math.floor(totalSeconds / 3_600);
@@ -180,54 +176,6 @@ const setPhase = (ctx: ExtensionContext, run: ActiveRun, phase: Phase): void => 
 	updateWorkingMessage(ctx, run);
 };
 
-const clearUpdateTimer = (): void => {
-	if (updateTimer === undefined) return;
-	clearInterval(updateTimer);
-	updateTimer = undefined;
-};
-
-const restoreWorkingDefaults = (ctx: ExtensionContext): void => {
-	ctx.ui.setWorkingMessage();
-	ctx.ui.setWorkingIndicator();
-};
-
-const restoreAllDefaults = (ctx: ExtensionContext): void => {
-	restoreWorkingDefaults(ctx);
-	ctx.ui.setHiddenThinkingLabel();
-};
-
-const stopRun = (ctx: ExtensionContext): void => {
-	clearUpdateTimer();
-	activeRun = undefined;
-	restoreWorkingDefaults(ctx);
-};
-
-const startRun = (ctx: ExtensionContext): void => {
-	clearUpdateTimer();
-
-	const now = Date.now();
-	const initialRequestInputTokens = pendingRequestInputTokens;
-	pendingRequestInputTokens = 0;
-	const run: ActiveRun = {
-		startedAt: now,
-		lastTokenAt: now,
-		phase: DEFAULT_PHASE,
-		tokenDirection: "up",
-		requestInputTokens: initialRequestInputTokens,
-		completedOutputTokens: 0,
-		currentMessageOutputTokens: 0,
-	};
-
-	activeRun = run;
-	ctx.ui.setWorkingIndicator();
-	ctx.ui.setHiddenThinkingLabel(HIDDEN_THINKING_LABEL);
-	updateWorkingMessage(ctx, run);
-	updateTimer = setInterval(() => {
-		if (activeRun !== run) return;
-		updateWorkingMessage(ctx, run);
-	}, UPDATE_INTERVAL_MS);
-};
-
 const reconcileCurrentMessageEstimate = (run: ActiveRun, message: unknown): boolean => {
 	if (!message || typeof message !== "object") return false;
 	const content = (message as { content?: unknown }).content;
@@ -274,6 +222,58 @@ const phaseFromAssistantEvent = (assistantMessageEvent: { type?: string }): Phas
 };
 
 export default function thinkingMessagingExtension(pi: ExtensionAPI) {
+	let activeRun: ActiveRun | undefined;
+	let updateTimer: ReturnType<typeof setInterval> | undefined;
+	let pendingRequestInputTokens = 0;
+
+	const clearUpdateTimer = (): void => {
+		if (updateTimer === undefined) return;
+		clearInterval(updateTimer);
+		updateTimer = undefined;
+	};
+
+	const restoreWorkingDefaults = (ctx: ExtensionContext): void => {
+		ctx.ui.setWorkingMessage();
+		ctx.ui.setWorkingIndicator();
+	};
+
+	const restoreAllDefaults = (ctx: ExtensionContext): void => {
+		restoreWorkingDefaults(ctx);
+		ctx.ui.setHiddenThinkingLabel();
+	};
+
+	const stopRun = (ctx: ExtensionContext): void => {
+		clearUpdateTimer();
+		activeRun = undefined;
+		restoreWorkingDefaults(ctx);
+	};
+
+	const startRun = (ctx: ExtensionContext): void => {
+		clearUpdateTimer();
+
+		const now = Date.now();
+		const initialRequestInputTokens = pendingRequestInputTokens;
+		pendingRequestInputTokens = 0;
+		const run: ActiveRun = {
+			startedAt: now,
+			lastTokenAt: now,
+			phase: DEFAULT_PHASE,
+			tokenDirection: "up",
+			requestInputTokens: initialRequestInputTokens,
+			completedOutputTokens: 0,
+			currentMessageOutputTokens: 0,
+		};
+
+		activeRun = run;
+		ctx.ui.setWorkingIndicator();
+		ctx.ui.setHiddenThinkingLabel(HIDDEN_THINKING_LABEL);
+		updateWorkingMessage(ctx, run);
+		updateTimer = setInterval(() => {
+			if (activeRun !== run) return;
+			updateWorkingMessage(ctx, run);
+		}, UPDATE_INTERVAL_MS);
+	};
+
 	pi.on("session_start", (_event, ctx) => {
 		clearUpdateTimer();
 		activeRun = undefined;
