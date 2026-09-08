@@ -34,7 +34,6 @@
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"test/**/*.test.ts\"",
-    "test:pi": "node --test --test-timeout=15000 --experimental-strip-types test/installed-pi.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
