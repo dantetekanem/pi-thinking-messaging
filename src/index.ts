@@ -25,7 +25,8 @@ interface AgentEventMap {
 	message_start: { message: AssistantMessage };
 	message_update: { message: AssistantMessage; assistantMessageEvent: { type?: string; delta?: unknown } };
 	message_end: { message: AssistantMessage };
-	tool_execution_start: unknown;
+	tool_execution_start: { toolCallId: string };
+	tool_execution_end: { toolCallId: string };
 	agent_end: unknown;
 	session_shutdown: unknown;
 }
@@ -39,6 +40,7 @@ interface ExtensionAPI {
 
 const DEFAULT_PHASE = "Working";
 const THINKING_PHASE = "Thinking";
+const TOOL_WAIT_PHASE = "Waiting for tools";
 const HIDDEN_THINKING_LABEL = "";
 const UPDATE_INTERVAL_MS = 1_000;
 export const IDLE_TAKING_A_WHILE_THRESHOLD_MS = 60_000;
@@ -64,6 +66,7 @@ const TOKEN_DIRECTION_ARROW: Record<TokenDirection, string> = {
 export interface ActiveRun {
 	startedAt: number;
 	lastTokenAt: number;
+	outstandingTools: Map<string, number>;
 	phase: Phase;
 	tokenDirection: TokenDirection;
 	requestInputTokens: number;
@@ -150,14 +153,21 @@ export const IDLE_STAGES: ReadonlyArray<{ thresholdMs: number; notice: string; c
 export const getIdleStage = (
 	run: ActiveRun,
 	now = Date.now(),
-): { thresholdMs: number; notice: string; color: IdleColor } | undefined =>
-	IDLE_STAGES.find((stage) => now - run.lastTokenAt > stage.thresholdMs);
+): { thresholdMs: number; notice: string; color: IdleColor } | undefined => {
+	if (run.outstandingTools.size > 0) return undefined;
+	return IDLE_STAGES.find((stage) => now - run.lastTokenAt > stage.thresholdMs);
+};
 
 export const isRunIdle = (run: ActiveRun, now = Date.now()): boolean =>
 	getIdleStage(run, now) !== undefined;
 
 export const buildWorkingMessage = (run: ActiveRun, now = Date.now()): string => {
-	const baseMessage = `${run.phase}… (${formatElapsed(now - run.startedAt)} · ${formatTokenSummary(run)})`;
+	const summary = `${formatElapsed(now - run.startedAt)} · ${formatTokenSummary(run)}`;
+	const oldestToolStartedAt = run.outstandingTools.values().next().value;
+	if (oldestToolStartedAt !== undefined) {
+		return `${TOOL_WAIT_PHASE}… (${summary} · tool wait ${formatElapsed(now - oldestToolStartedAt)})`;
+	}
+	const baseMessage = `${run.phase}… (${summary})`;
 	const idleStage = getIdleStage(run, now);
 	return idleStage ? `${baseMessage} ${colorText(idleStage.notice, idleStage.color)}` : baseMessage;
 };
@@ -257,6 +267,7 @@ export default function thinkingMessagingExtension(pi: ExtensionAPI) {
 		const run: ActiveRun = {
 			startedAt: now,
 			lastTokenAt: now,
+			outstandingTools: new Map(),
 			phase: DEFAULT_PHASE,
 			tokenDirection: "up",
 			requestInputTokens: initialRequestInputTokens,
@@ -337,9 +348,18 @@ export default function thinkingMessagingExtension(pi: ExtensionAPI) {
 		setPhase(ctx, activeRun, DEFAULT_PHASE);
 	});
 
-	pi.on("tool_execution_start", (_event, ctx) => {
+	pi.on("tool_execution_start", (event, ctx) => {
 		if (!activeRun) return;
+		if (!activeRun.outstandingTools.has(event.toolCallId)) {
+			activeRun.outstandingTools.set(event.toolCallId, Date.now());
+		}
 		setPhase(ctx, activeRun, DEFAULT_PHASE);
+	});
+
+	pi.on("tool_execution_end", (event, ctx) => {
+		if (!activeRun) return;
+		const wasOutstanding = activeRun.outstandingTools.delete(event.toolCallId);
+		if (wasOutstanding) updateWorkingMessage(ctx, activeRun);
 	});
 
 	pi.on("agent_end", (_event, ctx) => {

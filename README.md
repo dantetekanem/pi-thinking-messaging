@@ -24,12 +24,14 @@ Thinking… (7m 7s · ↓ 30.0k tokens)
 - Shows a cumulative `input + output` token total that increases through the run; `↑`/`↓` only indicates the current token movement direction.
 - For input, estimates only the current user talk/prompt text, not the full serialized provider payload, system prompt, tool schemas, or cached context overhead.
 - For output, estimates the current assistant message while streaming, then reconciles the output estimate with provider-reported output usage when each assistant message ends.
-- Appends staged idle notices when no request or response token activity is seen:
+- While any tool calls are outstanding, shows `Waiting for tools…` with the run total and `tool wait` elapsed time for the oldest outstanding call. Calls are tracked by `toolCallId`, including overlapping calls to the same tool. The wait time does not indicate health or progress.
+- Appends staged idle notices when no tools are outstanding and no request or response token activity is seen:
   - after more than 60 seconds: yellow `- agent is taking a while...`
   - after more than 180 seconds: yellow `- agent is probably idle...`
   - after more than 300 seconds: red `- agent is idle`
 - Does not intercept terminal input, send messages, steer/follow up, or await work in event handlers, so Esc/abort stays owned by Pi.
-- Clears intervals and restores Pi's working-loader defaults on `agent_end`.
+- Tool start/end events do not reset the token-inactivity clock. After the last tool finishes (successfully or with an error), the current idle notice can return until the next provider request or token activity.
+- Clears intervals and outstanding tool state on run/session cleanup, including `agent_end` after an abort, and restores Pi's working-loader defaults. Each extension instance keeps its own state.
 
 No commands or settings are registered. To change the labels or update interval, edit the constants at the top of `src/index.ts`.
 

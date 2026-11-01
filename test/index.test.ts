@@ -19,6 +19,7 @@ const ANSI_RESET = "\u001b[0m";
 const makeRun = (overrides: Partial<ActiveRun> = {}): ActiveRun => ({
 	startedAt: 0,
 	lastTokenAt: 0,
+	outstandingTools: new Map(),
 	phase: "Working",
 	tokenDirection: "up",
 	requestInputTokens: 1_200,
